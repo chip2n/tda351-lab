@@ -23,12 +23,11 @@ sign (p,q,g) (x,y) k msg = (r, s)
 
 verify :: DSAParameter -> PublicKey -> Digest -> Signature -> Bool
 verify (p,q,g) y msg (r, s) = v == r
-  where (_, _, w') = extEuclidean q s
-        w = w' `mod` q
+  where w = s `invMod` q
         z = convertS msg
         u1 = (z*w) `mod` q
         u2 = (r*w) `mod` q
-        v = (mexp p g u1 * mexp p y u2) `mod` q
+        v = ((mexp p g u1 * mexp p y u2) `mod` p) `mod` q
 
 convertS :: String -> Integer
 convertS s = foldr (\(p,c) acc -> (+) acc . (*) (16^p) . fromIntegral . digitToInt $ c) 0 s'
