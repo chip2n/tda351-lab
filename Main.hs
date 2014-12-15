@@ -16,7 +16,7 @@ type PublicKey = Integer
 
 sign :: DSAParameter -> Key -> Integer -> Digest -> Signature
 sign (p,q,g) (x,y) k msg = (r, s)
-  where r = (mexp p g x) `mod` q
+  where r = (mexp p g k) `mod` q
         z = convertS msg
         kInv = k `invMod` q
         s = (kInv * (z + x*r)) `mod` q
@@ -30,8 +30,9 @@ verify (p,q,g) y msg (r, s) = v == r
         v = ((mexp p g u1 * mexp p y u2) `mod` p) `mod` q
 
 convertS :: String -> Integer
-convertS s = foldr (\(p,c) acc -> (+) acc . (*) (16^p) . fromIntegral . digitToInt $ c) 0 s'
+convertS s = foldr (\(p,c) acc -> (+) acc . fromHex p $ c) 0 s'
   where s' = zip [0..] (reverse s)
+        fromHex p = (*) (16^p) . fromIntegral . digitToInt
 
 invMod :: Integer -> Integer -> Integer
 invMod a b = i `mod` b
@@ -39,7 +40,7 @@ invMod a b = i `mod` b
 
 extEuclidean :: Integer -> Integer -> (Integer, Integer, Integer)
 extEuclidean a b
-    | rem a b == 0 = (b, 0, 1)
+    | r == 0 = (b, 0, 1)
     | otherwise = (d, y', x' - y'*q)
  where (q, r) = quotRem a b
        (d, x', y') = extEuclidean b r
@@ -70,6 +71,8 @@ validateDSAParameter (p, q, g) = and $
 numberOfBits :: Integer -> Int
 numberOfBits a = length $ showIntAtBase 2 intToDigit a ""
 
+-- Computes modular exponentiation
+mexp :: Integer -> Integer -> Integer -> Integer
 mexp p a 0 = 1
 mexp p a n
     | even n = r
@@ -148,9 +151,9 @@ verifyMessages dsaParam y =  do
 printKeys :: [Key] -> IO ()
 printKeys [] = return ()
 printKeys ((x,y):ks) = do
-  putStrLn $ "x=" ++ show x
-  putStrLn $ "y=" ++ show y
-  printKeys ks
+    putStrLn $ "x=" ++ show x
+    putStrLn $ "y=" ++ show y
+    printKeys ks
 
 
 -------- Tests ----------
@@ -159,19 +162,19 @@ printKeys ((x,y):ks) = do
 newtype EuclideanInput = EuclideanInput (Integer, Integer)
 
 instance Arbitrary EuclideanInput where
-  arbitrary = do
-    a <- choose (1, 10000)
-    b <- choose (1, a)
-    return $ EuclideanInput (a,b)
+    arbitrary = do
+        a <- choose (1, 10000)
+        b <- choose (1, a)
+        return $ EuclideanInput (a,b)
   
 instance Show EuclideanInput where
-  show (EuclideanInput x) = show x
+    show (EuclideanInput x) = show x
 
 prop_extEuclidean :: EuclideanInput -> Property
 prop_extEuclidean (EuclideanInput (a, b)) = conjoin $
-  [ property $ d == gcd a b       -- calculates correct gcd
-  , d == 1 ==> gcd y a == 1       -- calculates correct inverse (y inverse of b mod a)
-  , d == 1 ==> gcd x b == 1       -- calculates correct inverse (x inverse of a mod b)
-  , property $ a*x + b*y == d     -- calculates bezouts identity
-  ]
-  where (d, x, y) = extEuclidean a b
+    [ property $ d == gcd a b       -- calculates correct gcd
+    , d == 1 ==> gcd y a == 1       -- calculates correct inverse (y inverse of b mod a)
+    , d == 1 ==> gcd x b == 1       -- calculates correct inverse (x inverse of a mod b)
+    , property $ a*x + b*y == d     -- calculates bezouts identity
+    ]
+    where (d, x, y) = extEuclidean a b
